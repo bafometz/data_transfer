@@ -14,12 +14,11 @@ add_executable(DataTransfer
                sources/server/server.h sources/server/server.cpp
                sources/client/client.h sources/client/client.cpp
                sources/main_object/mainobject.h sources/main_object/mainobject.cpp
-               sources/io_device/iodevice.h sources/io_device/iodevice.cpp
+               sources/io_device/iodevice.h
                sources/socket/socket.h sources/socket/socket.cpp
                sources/data_package/datatpackage.h sources/data_package/datatpackage.cpp
                sources/logger/logger.h
                sources/thread_pool/threadpool.h
-               # sources/connection_handler/connectionhandler.h sources/connection_handler/connectionhandler.cpp
                sources/helpers/helpers.h sources/helpers/helpers.cpp
                sources/event_loop/eventloop.h sources/event_loop/eventloop.cpp
                sources/file_send_state/transmittionStatus.h

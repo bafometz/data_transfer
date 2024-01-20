@@ -3,25 +3,56 @@
 #include <cstdint>
 #include <vector>
 
+/**
+ * @brief Абстрактный класс, по-факту нужен для возможности использования кроме сокета другие каналы передачи, например последовательный порт.
+ * так как раньше я преимущественно занимался общением через последовательный порт, то по привычке обозвал класс IODevice
+ */
 class IODevice
 {
   public:
     enum class OpenMode
     {
-        READ,
-        WRITE,
-        READ_WRITE
+        READ,       ///< Открыть только на чтение
+        WRITE,      ///< Открыть только на запись
+        READ_WRITE  ///< Открыть на чтение и запись
     };
 
     IODevice() = default;
     virtual ~IODevice() {};
+    /**
+     * @brief Открыть устройство, с одним из флагов откртия
+     * @param Флаг открытия
+     */
+    virtual bool open(OpenMode mode = OpenMode::READ_WRITE) = 0;
 
-    virtual bool open(OpenMode mode = OpenMode::READ_WRITE)    = 0;
-    virtual bool close()                                       = 0;
-    virtual bool isOpened()                                    = 0;
-    virtual int  read(std::vector< uint8_t >&, int size = -1)  = 0;
-    virtual int  write(std::vector< uint8_t >&, int size = -1) = 0;
-    virtual int  bytesAviable()                                = 0;
+    /**
+     * @brief Закрыть устройство, после вызова чтение и запись больше недоступны
+     */
+    virtual bool close() = 0;
+
+    /**
+     * @brief Проверяет, открыто ли устройтсво
+     */
+    virtual bool isOpened() = 0;
+
+    /**
+     * @brief Читает из усторойства заданное количество байт, если не задано (т.е. -1) читает пока не закончатся данные
+     * @param Буфер в который будут сложены прочтенные данные
+     * @return Количество байт прочитанных из устройства
+     */
+    virtual int read(std::vector< uint8_t >&, int size = -1) = 0;
+
+    /**
+     * @brief Пишет в устройство заданное количество байт, если не задано (т.е -1) будет писать на всю длинну буфера т.е. std::vector::size
+     * @param Буффер с данными которые нужно передать
+     * @param Количество байт которые нужно передать из буффера, -1 если нужно писать весь буфер
+     */
+    virtual int write(std::vector< uint8_t >&, int size = -1) = 0;
+
+    /**
+     * @param Проверяет есть ли доступные данные для чтения
+     */
+    virtual int bytesAviable() = 0;
 };
 
 #endif  // IODEVICE_H

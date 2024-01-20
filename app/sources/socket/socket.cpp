@@ -21,13 +21,22 @@ Socket::Socket(int sockNum) noexcept :
 {
 }
 
-Socket::Socket(const std::string &address, int portNum, SocketType st) noexcept :
+Socket::Socket(const std::string &address, int portNum, SocketType st, bool nonBlockingMode) noexcept :
     IODevice(),
     socketAddress_ { address },
     socketPortNum_ { portNum },
     sockType_ { st }
 {
-    sock_   = socket(toNixSocketType(), SOCK_STREAM, IPPROTO_TCP);
+    if (nonBlockingMode)
+    {
+        sock_        = socket(toNixSocketType(), SOCK_STREAM | SOCK_NONBLOCK, IPPROTO_TCP);
+        asycnSocket_ = true;
+    }
+    else
+    {
+        sock_ = socket(toNixSocketType(), SOCK_STREAM, IPPROTO_TCP);
+    }
+
     int val = 1;
 
     if (setsockopt(sock_, SOL_SOCKET, SO_REUSEADDR, &val, sizeof(int)) < 0)
@@ -38,11 +47,9 @@ Socket::Socket(const std::string &address, int portNum, SocketType st) noexcept 
 
 Socket::~Socket()
 {
-    // For AF_UNIX you can use call unlink (path); after close() socket in "server" app
-
     if (sock_ > 0)
     {
-        auto res = ::shutdown(sock_, 2);
+        auto res = ::shutdown(sock_, SHUT_RDWR);
 
         if (res < 0)
         {
@@ -51,6 +58,11 @@ Socket::~Socket()
         else
         {
             sock_ = -1;
+        }
+
+        if (SocketType::LOCAL == sockType_)
+        {  // For AF_UNIX | AF_LOCAL you can use call unlink (path); after close() socket in "server" app
+            ::unlink(socketAddress_.c_str());
         }
     }
 }
@@ -107,7 +119,7 @@ bool Socket::close()
 
 bool Socket::isOpened()
 {
-    return true;
+    return sock_ != -1;
 }
 
 bool Socket::listen()
