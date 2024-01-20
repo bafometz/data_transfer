@@ -61,7 +61,7 @@ Socket::~Socket()
         }
 
         if (SocketType::LOCAL == sockType_)
-        {  // For AF_UNIX you can use call unlink (path); after close() socket in "server" app
+        {  // For AF_UNIX | AF_LOCAL you can use call unlink (path); after close() socket in "server" app
             ::unlink(socketAddress_.c_str());
         }
     }
@@ -119,7 +119,7 @@ bool Socket::close()
 
 bool Socket::isOpened()
 {
-    return true;
+    return sock_ != -1;
 }
 
 bool Socket::listen()
