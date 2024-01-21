@@ -12,6 +12,7 @@ Server::Server(int port) :
     std::signal(SIGKILL, SignalHandler::signalHandler);
     std::signal(SIGTERM, SignalHandler::signalHandler);
     std::signal(SIGABRT, SignalHandler::signalHandler);
+    std::signal(SIGPIPE, SignalHandler::signalHandler);
 }
 
 Server::~Server()
