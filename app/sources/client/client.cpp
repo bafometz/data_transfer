@@ -33,14 +33,14 @@ int Client::sendFile(const std::string &filePath)
 
     auto packAwait = requestSendData(fileSize);
 
-    if (packAwait <= 0)
+    if (packAwait.first <= 0 || packAwait.second <= 0)
     {
         LOG_ERROR("Server doesen't await data");
         return 1;
     }
 
     // Всё отправили ждем завершения
-    auto packagesSended = readAndSendFile(filePath);
+    auto packagesSended = readAndSendFile(filePath, packAwait);
     LOG_INFO("Total packages uploaded:", packagesSended);
 
     // Подтверждаем что всё хорошо
@@ -54,7 +54,7 @@ int Client::getfileSize(const std::string &file) const
     return in.tellg();
 }
 
-int Client::requestSendData(int fileSizeInBytes)
+std::pair< uint64_t, uint64_t > Client::requestSendData(int fileSizeInBytes)
 {
     DatatPackage dp;
     dp.setCommand(COMMAND::REQUEST_TO_SEND);
@@ -63,9 +63,9 @@ int Client::requestSendData(int fileSizeInBytes)
     dp.calcChecksum();
 
     std::vector< uint8_t > pack;
-    std::ignore     = dp.generatePackage(pack);
-    std::ignore     = sock_.write(dp);
-    int retryCcount = 0;
+    std::ignore    = dp.generatePackage(pack);
+    std::ignore    = sock_.write(dp);
+    int retryCount = 0;
 
     pack.clear();
     pack.resize(buffSize_);
@@ -79,7 +79,7 @@ int Client::requestSendData(int fileSizeInBytes)
         LOG_ERROR("Checksum verification failed");
         sendPackage.setCommand(COMMAND::CHECKSUM_ERROR);
         auto res = retryPackage(sendPackage, recivePackage, 10);
-        if (res <= 0) return -1;
+        if (res <= 0) return { -1, -1 };
     }
 
     if (recivePackage.getCommand() != COMMAND::REQUEST_TO_SEND_APPROVED)
@@ -88,16 +88,20 @@ int Client::requestSendData(int fileSizeInBytes)
     }
     std::vector< uint8_t > totalPackArr;
     recivePackage.getData(totalPackArr);
-    return fromBytes< uint64_t >(totalPackArr);
+    std::vector< uint8_t > total_packages(totalPackArr.begin(), totalPackArr.begin() + (totalPackArr.size() * 0.5) - 1);
+    std::vector< uint8_t > one_package_size(totalPackArr.begin() + (totalPackArr.size() * 0.5), totalPackArr.end());
+
+    return { fromBytes< uint64_t >(total_packages), fromBytes< uint64_t >(one_package_size) };
 }
 
-int Client::readAndSendFile(const std::string &file)
+int Client::readAndSendFile(const std::string &file, std::pair< uint64_t, uint64_t > send_info)
 {
-    FILE                  *fp             = std::fopen(file.c_str(), "r");
-    auto                   fileSize       = getfileSize(file);
-    uint64_t               uploadedBytes  = 0;
-    int                    retryCount     = 0;
-    int                    packagesSended = 0;
+    FILE    *fp             = std::fopen(file.c_str(), "r");
+    auto     fileSize       = getfileSize(file);
+    uint64_t uploadedBytes  = 0;
+    int      retryCount     = 0;
+    int      packagesSended = 0;
+    buffSize_               = send_info.second;
     std::vector< uint8_t > fileReadBuffer(buffSize_);
     std::vector< uint8_t > packagesBuffer(buffSize_);
     DatatPackage           request;

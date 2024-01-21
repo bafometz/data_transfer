@@ -2,6 +2,7 @@
 #define SERVER_H
 #include "../event_loop/eventloop.h"
 #include "../file_send_state/transmittionStatus.h"
+#include "../session/session.h"
 #include "../socket/socket.h"
 #include "../thread_pool/threadpool.h"
 
@@ -61,8 +62,8 @@ class Server
     SocketPtr acceptNewConnection();
     void      createSubEventLoop(SocketPtr);
 
-    void recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock);
-    void sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock);
+    void recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss);
+    void sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss);
 
   private:
     int epollFd_ = -1;

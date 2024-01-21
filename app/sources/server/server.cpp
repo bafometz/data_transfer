@@ -1,7 +1,7 @@
 #include "server.h"
 #include "../helpers/helpers.h"
 #include "../logger/logger.h"
-
+#include "../session/session.h"
 #include <cstring>
 #include <sys/epoll.h>
 
@@ -91,60 +91,57 @@ void Server::createSubEventLoop(SocketPtr pSock)
         {
             EventLoop      lp(EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR, pSock->getFd());
             transmit_state st;
+            Session        ss;
             st.buffer.resize(2048);
-            recivePackage(lp, st, pSock);
-            sendPackage(lp, st, pSock);
+            recivePackage(lp, st, pSock, ss);
+            sendPackage(lp, st, pSock, ss);
             if (!lp.initEventPoll()) return;
             lp.start();
         });
 }
 
-void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock)
+void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss)
 {
     ev.bindSlot(EPOLLIN,
-                [&state, pSock, &ev]()
+                [&state, pSock, &ev, &ss]()
                 {
-                    DatatPackage recivePackage;
-                    DatatPackage responsePackage;
-
                     auto recivedDataSize = pSock->read(state.buffer, state.rwChunkSize);
-                    recivePackage.replacePackage(state.buffer);
-
-                    if (recivedDataSize < 0)  // Ошибка 1
-                    {
-                        LOG_ERROR("Less than zero data readed, error");
-                        state.cleanUp();
-                        return EVENT_LOOP_SIGNALS::SIG_EXIT;
-                    }
-
-                    if (recivedDataSize == 0)  // Ошибка 2
-                    {
-                        LOG_ERROR("0 bytes from client socket read, close socket");
-                        state.cleanUp();
-                        return EVENT_LOOP_SIGNALS::SIG_EXIT;
-                    }
-
-                    if (recivedDataSize < DatatPackage::minSize())  // Ошибка 3
-                    {
-                        LOG_ERROR("Package smaller than 8 bytes, error");
-                        responsePackage.setCommand(COMMAND::CHECKSUM_ERROR);
-                        responsePackage.calcChecksum();
-                        state.packageToSend.replacePackage(std::move(responsePackage));
-                        return EVENT_LOOP_SIGNALS::SIG_NONE;
-                    }
-
-                    if (!recivePackage.verifyCheckSum())  // Ошибка 4
-                    {
-                        LOG_INFO("Checksum error");
-                        responsePackage.setCommand(COMMAND::CHECKSUM_ERROR);
-                        responsePackage.calcChecksum();
-                        state.packageToSend.replacePackage(std::move(responsePackage));
-                        return EVENT_LOOP_SIGNALS::SIG_NONE;
-                    }
-
+                    ss.recivedPackageRef().replacePackage(state.buffer);
                     LOG_INFO("Recived from client:", recivedDataSize, "bytes");
 
-                    if (recivePackage.getCommand() == COMMAND::CHECKSUM_ERROR)
+                    if (recivedDataSize < 0)  // Ошибка, отвалился клиент (т.к. принятые данные -1)
+                    {
+                        LOG_ERROR("Less than zero data readed, error");
+                        ss.reset();
+                        return EVENT_LOOP_SIGNALS::SIG_EXIT;
+                    }
+
+                    if (recivedDataSize == 0)  // Ошибка, ничего не прочитали от клиента, получается тоже отвалился
+                    {
+                        LOG_ERROR("0 bytes from client socket read, close socket");
+                        ss.reset();
+                        return EVENT_LOOP_SIGNALS::SIG_EXIT;
+                    }
+
+                    if (recivedDataSize < DatatPackage::minSize())  // Ошибка, количество полученных байт меньше минимально допустимого
+                    {
+                        LOG_ERROR("Package smaller than 8 bytes, error");
+                        ss.packageToSendRef().clearData();
+                        ss.packageToSendRef().setCommand(COMMAND::CHECKSUM_ERROR);
+                        ss.packageToSendRef().calcChecksum();
+                        return EVENT_LOOP_SIGNALS::SIG_NONE;
+                    }
+
+                    if (!ss.recivedPackageRef().verifyCheckSum())  // Ошибка контрольной суммы пакета, нужно уведомить клиента
+                    {
+                        LOG_INFO("Checksum error");
+                        ss.packageToSendRef().clearData();
+                        ss.packageToSendRef().setCommand(COMMAND::CHECKSUM_ERROR);
+                        ss.packageToSendRef().calcChecksum();
+                        return EVENT_LOOP_SIGNALS::SIG_NONE;
+                    }
+
+                    if (ss.recivedPackageRef().getCommand() == COMMAND::CHECKSUM_ERROR)  // Клиенту пришел битый пакет, нужно отправить заново
                     {
                         LOG_WARN("Client recive broken package, resend");
                         return EVENT_LOOP_SIGNALS::SIG_NONE;
@@ -154,105 +151,82 @@ void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock
                     {
                         // Получаем размер файла
                         std::vector< uint8_t > fSizeArray(8);
-                        recivePackage.getData(fSizeArray);
-                        auto fileSize = fromBytes< uint64_t >(fSizeArray);
+                        ss.recivedPackageRef().getData(fSizeArray);
 
-                        // Проверяем что есть место его схранить
-                        state.inputFilePath = helpers::getDir(helpers::pathToExec());
+                        // Устанавливаем размер файла
+                        ss.transmittedDataRef().maxBytes = fromBytes< uint64_t >(fSizeArray);
 
-                        if (state.inputFilePath.empty())
+                        // Проверяем, есть ли возможность сохранить файл, если нет - прервыаем передачу
+                        if (!ss.canSaveFile())
                         {
                             LOG_ERROR("Can't save file, path to save files empty");
-                            responsePackage.setCommand(COMMAND::REQUEST_TO_SEND_REJECT);
+                            ss.packageToSendRef().setCommand(COMMAND::REQUEST_TO_SEND_REJECT);
                             state.state = TRANSMISSION_STATE::ABORT;
-                            state.packageToSend.replacePackage(std::move(responsePackage));
+                            state.packageToSend.replacePackage(std::move(ss.packageToSendRef()));
                             return EVENT_LOOP_SIGNALS::SIG_NONE;
                         }
 
-                        auto freeSpace = helpers::getFreeDiskSpace(state.inputFilePath);
+                        LOG_INFO("Generated file name", ss.fileName());
+                        ss.transmittedDataRef().convertBytesToPackages(ss.transmittedDataRef().maxBytes);
 
-                        if (freeSpace < fileSize)
-                        {
-                            // Ответить ошибкой что всё плохо, места нет
-                            LOG_ERROR("Can't save file, not enought disk space");
-                            responsePackage.setCommand(COMMAND::REQUEST_TO_SEND_REJECT);
-                            state.state = TRANSMISSION_STATE::ABORT;
-                            state.packageToSend.replacePackage(std::move(responsePackage));
-                            return EVENT_LOOP_SIGNALS::SIG_NONE;
-                        }
+                        LOG_INFO("Server await", ss.transmittedDataRef().maxPackages, "packages");
+                        LOG_INFO("Package size", ss.transmittedDataRef().packageSizeInBytes, "packages");
+                        ss.packageToSendRef().setCommand(COMMAND::REQUEST_TO_SEND_APPROVED);
+                        std::vector< uint8_t > total_packages = toBytes< std::vector< uint8_t > >(( uint64_t )ss.transmittedDataRef().maxPackages);
+                        std::vector< uint8_t > onePackageSize =  // Размер одного пакета
+                            toBytes< std::vector< uint8_t > >(( uint64_t )ss.transmittedDataRef().packageSizeInBytes);
 
-                        state.inputFileName = state.time.getCreationDate() + ".hex";
+                        // Сливаем два блока данных в один
+                        //  первые 64 байта - сколько пакетов ожидается
+                        //  вторые 64 байта - размер одного пакета
+                        ss.bufferRef().clear();
+                        ss.packageToSendRef().clearData();
+                        ss.bufferRef().insert(ss.bufferRef().begin(), total_packages.begin(), total_packages.end());
+                        ss.bufferRef().insert(ss.bufferRef().begin() + total_packages.size(), onePackageSize.begin(), onePackageSize.end());
+                        ss.packageToSendRef().setData(ss.bufferRef());
+                        ss.packageToSendRef().calcChecksum();
 
-                        LOG_INFO("Generated file name", state.inputFileName);
-                        if (helpers::isFileExist(state.inputFilePath + "/" + state.inputFileName))
-                        {
-                            LOG_WARN("File exist");
-                            if (!helpers::removeFile(state.inputFilePath + "/" + state.inputFileName))
-                            {
-                                LOG_WARN("Can't delete old file");
-                                state.time.updateCreationTime();
-                                state.inputFileName = state.time.getCreationDate() + ".hex";
-                                LOG_INFO("Rename file: ", state.inputFileName);
-                            }
-                        }
-
-                        // Считаем кол-во пакетов
-                        auto division = div(fileSize, 1024);
-                        if (division.rem > 0)
-                        {
-                            division.quot++;
-                        }
-
-                        state.packagesTotal = division.quot;
-                        LOG_INFO("Server await", state.packagesTotal, "packages");
-                        responsePackage.setCommand(COMMAND::REQUEST_TO_SEND_APPROVED);
-                        std::vector< uint8_t > total = toBytes< std::vector< uint8_t > >(( uint64_t )state.packagesTotal);
-                        responsePackage.setData(total);
-                        responsePackage.calcChecksum();
-                        state.packageToSend.replacePackage(std::move(responsePackage));
-                        LOG_INFO("Ready to write file");
                         return EVENT_LOOP_SIGNALS::SIG_NONE;
                     }
                     else if (state.state == TRANSMISSION_STATE::RECIVE_FILE)
                     {
-                        if (!state.inputFile.is_open())
+                        if (!ss.openFile())
                         {
-                            state.inputFile.open(state.inputFilePath + "/" + state.inputFileName, std::ios::binary | std::ios::out | std::ios::trunc);
-
-                            if (!state.inputFile.is_open())
-                            {
-                                LOG_ERROR("Can't open file");
-                                state.state = TRANSMISSION_STATE::ABORT;
-                                responsePackage.setCommand(COMMAND::ABORT);
-                                responsePackage.calcChecksum();
-                                state.packageToSend.replacePackage(std::move(responsePackage));
-                                return EVENT_LOOP_SIGNALS::SIG_NONE;
-                            }
-                        }
-
-                        if (recivePackage.getCommand() != COMMAND::DATA_PACKAGE)
-                        {
-                            // мб тут ошибку какую-то отправлять
+                            LOG_ERROR("Can't open file");
+                            state.state = TRANSMISSION_STATE::ABORT;
+                            ss.packageToSendRef().setCommand(COMMAND::ABORT);
+                            ss.packageToSendRef().clearData();
+                            ss.packageToSendRef().calcChecksum();
+                            state.packageToSend.replacePackage(std::move(ss.packageToSendRef()));
                             return EVENT_LOOP_SIGNALS::SIG_NONE;
                         }
 
-                        state.buffer.clear();
-                        auto bytesToWrite = recivePackage.getData(state.buffer);
-                        state.inputFile.write(( const char* )state.buffer.data(), bytesToWrite);
-                        state.packagesRecived++;
-                        LOG_INFO("Recived: ", state.packagesRecived, "/", state.packagesTotal);
+                        if (ss.recivedPackageRef().getCommand() != COMMAND::DATA_PACKAGE)
+                        {
+                            ss.packageToSendRef().setCommand(COMMAND::ABORT);
+                            ss.packageToSendRef().clearData();
+                            ss.packageToSendRef().calcChecksum();
+                            return EVENT_LOOP_SIGNALS::SIG_NONE;
+                        }
 
-                        responsePackage.setCommand(COMMAND::PACKAGE_ACCPTED);
-                        responsePackage.setData(state.packagesRecived);
-                        responsePackage.calcChecksum();
-                        state.packageToSend.replacePackage(std::move(responsePackage));
+                        ss.bufferRef().clear();
+                        auto bytesToWrite = ss.recivedPackageRef().getData(ss.bufferRef());
+                        ss.writeToFile(ss.bufferRef(), bytesToWrite);
+
+                        ss.transmittedDataRef().packageRecived(bytesToWrite);
+                        ss.printInfo();
+                        ss.packageToSendRef().clearData();
+                        ss.packageToSendRef().setCommand(COMMAND::PACKAGE_ACCPTED);
+                        ss.packageToSendRef().setData(state.packagesRecived);
+                        ss.packageToSendRef().calcChecksum();
                     }
                     else if (state.state == TRANSMISSION_STATE::AWAIT_FINAL_MESSAGE)
                     {
-                        if (recivePackage.getCommand() == COMMAND::ALL_DATA_SENDED)
+                        if (ss.recivedPackageRef().getCommand() == COMMAND::ALL_DATA_SENDED)
                         {
                             LOG_INFO("The client confirmed successful data transfer");
                             LOG_INFO("Close connection");
+                            ss.printInfo();
                             return EVENT_LOOP_SIGNALS::SIG_EXIT;
                         }
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
@@ -270,41 +244,44 @@ void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock
     ev.bindSlot(EPOLLHUP, []() { return EVENT_LOOP_SIGNALS::SIG_EXIT; });
 }
 
-void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock)
+void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss)
 {
     ev.bindSlot(EPOLLOUT,
-                [&state, pSock, &ev]() -> EVENT_LOOP_SIGNALS
+                [&state, pSock, &ev, &ss]() -> EVENT_LOOP_SIGNALS
                 {
-                    if (state.packageToSend.getCommand() == COMMAND::EMPTY_CMD)
+                    if (ss.packageToSendRef().getCommand() == COMMAND::EMPTY_CMD)
                     {
+                        // LOG_CRITICAL("Command to send: COMMAND::EMPTY_CMD");
                         return EVENT_LOOP_SIGNALS::SIG_NONE;
                     }
 
-                    auto writeResult = pSock->write(state.packageToSend);
+                    auto writeResult = pSock->write(ss.packageToSendRef());
+
                     if (writeResult < 0)
                     {
-                        state.cleanUp();
+                        LOG_ERROR("Write result less than zero, exit");
+                        ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
                     }
 
                     if (writeResult == 0)
                     {
-                        LOG_ERROR("Send recponce to client error, 0 bytes written, abort");
-                        state.cleanUp();
+                        LOG_ERROR("Send responce to client error, 0 bytes written, abort");
+                        ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
                     }
 
-                    state.lastSendedPackage.replacePackage(std::move(state.packageToSend));
-                    state.packageToSend.setCommand(COMMAND::EMPTY_CMD);
+                    ss.lastSendedPackageRef().replacePackage(std::move(ss.packageToSendRef()));
+                    ss.packageToSendRef().setCommand(COMMAND::EMPTY_CMD);
 
-                    if (state.state == TRANSMISSION_STATE::AWAIT_FILE_SIZE)
+                    if (state.state == TRANSMISSION_STATE::AWAIT_FILE_SIZE)  // Ждём первую посылку от клиента
                     {
                         state.state = TRANSMISSION_STATE::RECIVE_FILE;
                         return EVENT_LOOP_SIGNALS::SIG_NONE;
                     }
-                    else if (state.state == TRANSMISSION_STATE::RECIVE_FILE)
+                    else if (state.state == TRANSMISSION_STATE::RECIVE_FILE)  // Находимся в состоянии приёма файла
                     {
-                        if (state.packagesRecived == state.packagesTotal)
+                        if (ss.transmittedDataRef().maxPackages == ss.transmittedDataRef().packagesRecived)  // Получили все ождидаемые пакеты
                         {
                             state.state = TRANSMISSION_STATE::AWAIT_FINAL_MESSAGE;
                         }
@@ -316,13 +293,15 @@ void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock)
                     }
                     else if (state.state == TRANSMISSION_STATE::ABORT)
                     {
+                        LOG_WARN("Abort connection with client");
                         auto writeREs = pSock->write(state.packageToSend);
-                        state.cleanUp();
+                        ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
                     }
                     else
                     {
-                        state.cleanUp();
+                        LOG_WARN("Unknown state");
+                        ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
                     }
                 });

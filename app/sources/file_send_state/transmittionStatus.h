@@ -1,13 +1,13 @@
 #ifndef TRANSMITTIONSTATUS_H
 #define TRANSMITTIONSTATUS_H
 #include "../data_package/datatpackage.h"
+#include "../helpers/helpers.h"
 #include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <fstream>
 #include <iomanip>
 #include <sstream>
-#include "../helpers/helpers.h"
 
 enum class TRANSMISSION_STATE
 {
@@ -44,7 +44,7 @@ struct time_handler
         auto               timer = system_clock::to_time_t(creationTime);
         std::tm            bt    = *std::localtime(&timer);
         std::ostringstream oss;
-        oss << std::put_time(&bt, "%d-%m-%Y_%H:%M:%S");  // HH:MM:SS
+        oss << std::put_time(&bt, "%d-%m-%Y_%H:%M:%S");
         oss << '.' << std::setfill('0') << std::setw(3) << ms.count();
 
         return oss.str();
@@ -59,14 +59,16 @@ struct time_handler
 struct transmit_state
 {
     transmit_state() { buffer.reserve(rwChunkSize); };
+
     void cleanUp()
     {
-        if(inputFile.is_open() && helpers::isFileExist(inputFilePath + "/" + inputFileName) && packagesRecived != packagesTotal)
+        if (inputFile.is_open() && helpers::isFileExist(inputFilePath + "/" + inputFileName) && packagesRecived != packagesTotal)
         {
             inputFile.close();
             helpers::removeFile(inputFilePath + "/" + inputFileName);
         }
     }
+
     const int          rwChunkSize = DatatPackage::maxDataSize();
     TRANSMISSION_STATE state { TRANSMISSION_STATE::AWAIT_FILE_SIZE };  ///< Статус
 

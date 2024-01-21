@@ -169,6 +169,13 @@ int DatatPackage::getData() const
     return ret;
 }
 
+void DatatPackage::clearData()
+{
+    dataSize_.at(0) = 0x00;
+    dataSize_.at(1) = 0x00;
+    data_.clear();
+}
+
 void DatatPackage::generateCrc32Table()
 {
     crc32 crc;

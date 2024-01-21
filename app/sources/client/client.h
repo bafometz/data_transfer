@@ -14,15 +14,15 @@ class Client
   private:
     int getfileSize(const std::string& file) const;
 
-    int  requestSendData(int fileSizeInBytes);
-    int  readAndSendFile(const std::string& file);
-    bool confirmExit();
+    std::pair< uint64_t, uint64_t > requestSendData(int fileSizeInBytes);
+    int                             readAndSendFile(const std::string& file, std::pair< uint64_t, uint64_t >);
+    bool                            confirmExit();
 
     bool retryPackage(const DatatPackage& pkg, DatatPackage& reply, int times);
 
   private:
     int         port_;
-    const int   buffSize_ = 1024;
+    int         buffSize_ = 1024;
     const int   maxRetry_ = 10;
     std::string address_;
     Socket      sock_;
