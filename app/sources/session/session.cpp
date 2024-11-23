@@ -2,9 +2,11 @@
 #include "../helpers/helpers.h"
 #include "../logger/logger.h"
 
+#include <filesystem>
+
 Session::Session() :
     connectionTime_ { dateTime_.getCurrentTimestampStr() },
-    pathToFile_ { helpers::getDir(helpers::pathToExec()) }
+    pathToFile_ { std::filesystem::path(helpers::pathToExec()).parent_path() }
 {
     timer_.start();
 }

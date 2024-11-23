@@ -105,7 +105,7 @@ void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock
     ev.bindSlot(EPOLLIN,
                 [&state, pSock, &ss]()
                 {
-                    auto recivedDataSize = pSock->read(state.buffer, state.rwChunkSize);
+                    const auto recivedDataSize = pSock->read(state.buffer, state.rwChunkSize);
                     ss.recivedPackageRef().replacePackage(state.buffer);
                     LOG_INFO("Recived from client:", recivedDataSize, "bytes");
 
@@ -255,7 +255,7 @@ void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, 
                         return EVENT_LOOP_SIGNALS::SIG_NONE;
                     }
 
-                    auto writeResult = pSock->write(ss.packageToSendRef());
+                   const auto writeResult = pSock->write(ss.packageToSendRef());
 
                     if (writeResult < 0)
                     {

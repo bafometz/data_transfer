@@ -1,8 +1,20 @@
 #include "eventloop.h"
+
 #include "../logger/logger.h"
+
 #include <cstring>
 #include <sys/epoll.h>
 #include <unistd.h>
+
+namespace
+{
+    constexpr int                        maxEvents_ { 10 };
+    constexpr int                        timeout_ { 5000 };
+    constexpr std::array< uint32_t, 15 > eventsArray_ { EPOLLIN,     EPOLLPRI,       EPOLLOUT,    EPOLLRDNORM,  EPOLLRDBAND,
+                                                        EPOLLWRNORM, EPOLLWRBAND,    EPOLLMSG,    EPOLLERR,     EPOLLHUP,
+                                                        EPOLLRDHUP,  EPOLLEXCLUSIVE, EPOLLWAKEUP, EPOLLONESHOT, EPOLLET };
+
+}  // namespace
 
 EventLoop::EventLoop(uint32_t events, int fd) :
     fd_ { fd },
@@ -15,9 +27,6 @@ EventLoop::~EventLoop()
     epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd_, NULL);
     ::close(epollFd_);
 }
-
-std::array< uint32_t, 15 > EventLoop::eventsArray_ { EPOLLIN,  EPOLLPRI, EPOLLOUT,   EPOLLRDNORM,    EPOLLRDBAND, EPOLLWRNORM,  EPOLLWRBAND, EPOLLMSG,
-                                                     EPOLLERR, EPOLLHUP, EPOLLRDHUP, EPOLLEXCLUSIVE, EPOLLWAKEUP, EPOLLONESHOT, EPOLLET };
 
 void EventLoop::start()
 {
@@ -54,7 +63,7 @@ bool EventLoop::initEventPoll()
 
 bool EventLoop::bindSlot(uint32_t sig, std::function< EVENT_LOOP_SIGNALS() > func)
 {
-    auto find = slots_.find(sig);
+    const auto find = slots_.find(sig);
     if (find == slots_.end())
     {
         slots_.insert({ sig, func });
@@ -66,7 +75,7 @@ bool EventLoop::bindSlot(uint32_t sig, std::function< EVENT_LOOP_SIGNALS() > fun
 
 bool EventLoop::reBindSlot(uint32_t sig, std::function< EVENT_LOOP_SIGNALS() > func)
 {
-    auto find = slots_.find(sig);
+    const auto find = slots_.find(sig);
     if (find != slots_.end())
     {
         slots_[sig] = func;
@@ -84,9 +93,9 @@ void EventLoop::breakEventLoop()
 bool EventLoop::register_fd()
 {
     struct epoll_event ev;
-    ev.events  = eventsMask_;
-    ev.data.fd = fd_;
-    auto res   = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev);
+    ev.events      = eventsMask_;
+    ev.data.fd     = fd_;
+    const auto res = epoll_ctl(epollFd_, EPOLL_CTL_ADD, fd_, &ev);
 
     if (res == -1)
     {
@@ -99,7 +108,7 @@ bool EventLoop::register_fd()
 
 bool EventLoop::unregister_fd()
 {
-    auto res = epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd_, NULL);
+    const auto res = epoll_ctl(epollFd_, EPOLL_CTL_DEL, fd_, NULL);
 
     if (res == -1)
     {
@@ -114,20 +123,19 @@ bool EventLoop::processEventLoop()
 {
     EPOLLIN;
     struct epoll_event events[maxEvents_];
-    auto               newEventsCount = epoll_wait(epollFd_, events, maxEvents_, timeout_);
-    auto               errmask        = EPOLLERR | EPOLLHUP;
+    const auto         newEventsCount = epoll_wait(epollFd_, events, maxEvents_, timeout_);
+    const auto         errmask        = EPOLLERR | EPOLLHUP;
 
     if (newEventsCount < 0 && errno == EINTR) return false;
 
     if (newEventsCount == 0)
     {
-        // LOG_INFO("Timeout for event loop reached", timeout_, "msec");
         return true;
     }
 
     for (int i = 0; i < newEventsCount; i++)
     {
-        auto event { events[i] };
+        const auto event { events[i] };
 
         if (event.events & errmask)
         {
@@ -139,16 +147,15 @@ bool EventLoop::processEventLoop()
         {
             if (!static_cast< bool >(eventVal & event.events)) continue;
 
-            auto findSlot = slots_.find(eventVal);
-
+            const auto findSlot = slots_.find(eventVal);
             if (findSlot != slots_.end())
             {
-                auto returnSatus = findSlot->second();
+                const auto returnSatus = findSlot->second();
                 if (returnSatus == EVENT_LOOP_SIGNALS::SIG_EXIT) return false;
             }
             else
             {
-                // LOG_WARN("Recived signal", eventVal, "but slot not found");
+                LOG_WARN("Recived signal", eventVal, "but slot not found");
             }
         }
     }

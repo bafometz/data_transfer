@@ -8,7 +8,6 @@
 
 #include <atomic>
 #include <csignal>
-#include <map>
 
 struct SignalHandler
 {

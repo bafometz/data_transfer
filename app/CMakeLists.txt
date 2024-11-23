@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5)
 
 project(DataTransfer LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_compile_options(-Wall -Werror)
 set (EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../build/bin)

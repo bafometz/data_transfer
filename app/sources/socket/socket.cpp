@@ -213,8 +213,7 @@ int Socket::bytesAviable()
 int Socket::read(std::vector< uint8_t > &data, int size)
 {
     // auto res = ::read(sock_, data.data(), (size == -1 ? data.size() : size));
-    auto res = ::recv(sock_, data.data(), (size == -1 ? data.size() : size), 0);
-    return res;
+    return ::recv(sock_, data.data(), (size == -1 ? data.size() : size), 0);
 }
 
 int Socket::write(std::vector< uint8_t > &data, int size)
@@ -227,8 +226,8 @@ int Socket::write(std::vector< uint8_t > &data, int size)
 int Socket::write(const DatatPackage &pkg)
 {
     std::vector< uint8_t > buffer;
-    auto                   size        = pkg.generatePackage(buffer);
-    auto                   writeResult = ::write(sock_, buffer.data(), size);
+    const auto                   size        = pkg.generatePackage(buffer);
+    const auto                   writeResult = ::write(sock_, buffer.data(), size);
 
     if (writeResult < 0) handleError("Can't write:");
     return writeResult;
@@ -254,7 +253,7 @@ bool Socket::makeBindLocal() noexcept
     strncpy(name.sun_path, socketAddress_.c_str(), sizeof(name.sun_path));
     name.sun_path[sizeof(name.sun_path) - 1] = '\0';
 
-    auto size = (offsetof(struct sockaddr_un, sun_path) + strlen(name.sun_path));
+    const auto size = (offsetof(struct sockaddr_un, sun_path) + strlen(name.sun_path));
 
     if (bind(sock_, ( struct sockaddr * )&name, size) < 0)
     {

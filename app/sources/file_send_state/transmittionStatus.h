@@ -1,25 +1,30 @@
 #ifndef TRANSMITTIONSTATUS_H
 #define TRANSMITTIONSTATUS_H
-#include "../data_package/datatpackage.h"
-#include "../helpers/helpers.h"
+
 #include <chrono>
 #include <cstdint>
-#include <ctime>
+#include <filesystem>
 #include <fstream>
-#include <iomanip>
-#include <sstream>
+
+#include "../data_package/datatpackage.h"
+#include "../helpers/helpers.h"
 
 enum class TRANSMISSION_STATE
 {
-    AWAIT_FILE_SIZE,
-    RECIVE_FILE,
-    AWAIT_FINAL_MESSAGE,
-    ABORT,
+    AWAIT_FILE_SIZE,      ///< Ожидает приём файла
+    RECIVE_FILE,          ///< Идёт приём файла
+    AWAIT_FINAL_MESSAGE,  ///< Ожидает подтверждение об успешном приёме файла
+    ABORT,                ///<  Разрыв соединения
 };
 
 struct time_handler
 {
-    time_handler() = default;
+    time_handler()                               = default;
+    ~time_handler()                              = default;
+    time_handler(const time_handler& th)         = delete;
+    time_handler(time_handler&&)                 = delete;
+    time_handler& operator=(const time_handler&) = delete;
+    time_handler& operator=(time_handler&&)      = delete;
 
     void start() { timepointStart = std::chrono::steady_clock::now(); };
 
@@ -37,23 +42,9 @@ struct time_handler
         creationTime = system_clock::now();
     }
 
-    std::string getCreationDate()
-    {
-        using namespace std::chrono;
-        auto               ms    = duration_cast< milliseconds >(creationTime.time_since_epoch()) % 1000;
-        auto               timer = system_clock::to_time_t(creationTime);
-        std::tm            bt    = *std::localtime(&timer);
-        std::ostringstream oss;
-        oss << std::put_time(&bt, "%d-%m-%Y_%H:%M:%S");
-        oss << '.' << std::setfill('0') << std::setw(3) << ms.count();
-
-        return oss.str();
-    }
-
   private:
     std::chrono::steady_clock::time_point timepointStart;
     std::chrono::system_clock::time_point creationTime = std::chrono::system_clock::now();
-    ;
 };
 
 struct transmit_state
@@ -62,7 +53,7 @@ struct transmit_state
 
     void cleanUp()
     {
-        if (inputFile.is_open() && helpers::isFileExist(inputFilePath + "/" + inputFileName) && packagesRecived != packagesTotal)
+        if (inputFile.is_open() && std::filesystem::exists(inputFilePath + "/" + inputFileName) && packagesRecived != packagesTotal)
         {
             inputFile.close();
             helpers::removeFile(inputFilePath + "/" + inputFileName);
@@ -70,7 +61,7 @@ struct transmit_state
     }
 
     const int          rwChunkSize = DatatPackage::maxDataSize();
-    TRANSMISSION_STATE state { TRANSMISSION_STATE::AWAIT_FILE_SIZE };  ///< Статус
+    TRANSMISSION_STATE state { TRANSMISSION_STATE::AWAIT_FILE_SIZE };  ///< Статус передачи данных
 
     uint64_t handleTimestamp { 0 };   ///< Время с начала эпохи в мс, для конвертации в имя файла
     uint64_t packagesRecived { 0 };   ///< Сколько пакетов принято
