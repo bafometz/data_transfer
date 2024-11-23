@@ -4,7 +4,7 @@ project(DataTransfer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
+add_compile_options(-Wall -Werror)
 set (EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../build/bin)
 set (LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../build/bin)
 
@@ -22,6 +22,8 @@ add_executable(DataTransfer
                sources/helpers/helpers.h sources/helpers/helpers.cpp
                sources/event_loop/eventloop.h sources/event_loop/eventloop.cpp
                sources/file_send_state/transmittionStatus.h
+               sources/session/session.h sources/session/session.cpp
+               sources/time/time.h sources/time/time.cpp
 )
 
 include(GNUInstallDirs)
