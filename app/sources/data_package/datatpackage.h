@@ -48,7 +48,6 @@ T fromBytes(Container value)
             static_assert("Container size vlue size greater then T");
         }
 
-        std::array< uint8_t, sizeof(T) > buffer;
         std::reverse(value.begin(), value.end());
         T ret = *reinterpret_cast< const T* >(&value[0]);
         return ret;

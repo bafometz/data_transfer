@@ -8,8 +8,8 @@
 #define LOG_TAG "client"
 
 Client::Client(const std::string &address, int port) :
-    address_ { address },
     port_ { port },
+    address_ { address },
     sock_ { address, port }
 {
 }
@@ -28,9 +28,6 @@ int Client::sendFile(const std::string &filePath)
 
     // Отправляем запрос на отправку файла, прикрепляем кол-во байт для отправки
     // Если сервер готов принять, то он отвечает одобрением и сколько пакетов ожидает
-    int retryCount = 0;
-    int maxRetry_  = 4;
-
     auto packAwait = requestSendData(fileSize);
 
     if (packAwait.first <= 0 || packAwait.second <= 0)
@@ -65,7 +62,6 @@ std::pair< uint64_t, uint64_t > Client::requestSendData(int fileSizeInBytes)
     std::vector< uint8_t > pack;
     std::ignore    = dp.generatePackage(pack);
     std::ignore    = sock_.write(dp);
-    int retryCount = 0;
 
     pack.clear();
     pack.resize(buffSize_);
@@ -96,12 +92,12 @@ std::pair< uint64_t, uint64_t > Client::requestSendData(int fileSizeInBytes)
 
 int Client::readAndSendFile(const std::string &file, std::pair< uint64_t, uint64_t > send_info)
 {
-    FILE    *fp             = std::fopen(file.c_str(), "r");
-    auto     fileSize       = getfileSize(file);
-    uint64_t uploadedBytes  = 0;
-    int      retryCount     = 0;
-    int      packagesSended = 0;
-    buffSize_               = send_info.second;
+    FILE      *fp             = std::fopen(file.c_str(), "r");
+    const auto fileSize       = static_cast<uint64_t>(getfileSize(file));
+    uint64_t   uploadedBytes  = 0;
+    int        retryCount     = 0;
+    int        packagesSended = 0;
+    buffSize_                 = send_info.second;
     std::vector< uint8_t > fileReadBuffer(buffSize_);
     std::vector< uint8_t > packagesBuffer(buffSize_);
     DatatPackage           request;

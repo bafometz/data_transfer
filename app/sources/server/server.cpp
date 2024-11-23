@@ -103,7 +103,7 @@ void Server::createSubEventLoop(SocketPtr pSock)
 void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss)
 {
     ev.bindSlot(EPOLLIN,
-                [&state, pSock, &ev, &ss]()
+                [&state, pSock, &ss]()
                 {
                     auto recivedDataSize = pSock->read(state.buffer, state.rwChunkSize);
                     ss.recivedPackageRef().replacePackage(state.buffer);
@@ -247,7 +247,7 @@ void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock
 void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, Session& ss)
 {
     ev.bindSlot(EPOLLOUT,
-                [&state, pSock, &ev, &ss]() -> EVENT_LOOP_SIGNALS
+                [&state, pSock, &ss]() -> EVENT_LOOP_SIGNALS
                 {
                     if (ss.packageToSendRef().getCommand() == COMMAND::EMPTY_CMD)
                     {
@@ -294,7 +294,7 @@ void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, 
                     else if (state.state == TRANSMISSION_STATE::ABORT)
                     {
                         LOG_WARN("Abort connection with client");
-                        auto writeREs = pSock->write(state.packageToSend);
+                        pSock->write(state.packageToSend);
                         ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;
                     }

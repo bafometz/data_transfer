@@ -226,7 +226,7 @@ int DatatPackage::fillHeader(const std::vector< uint8_t > &data)
     int startPos = 0;
     int lastPos  = data.size() - 1;
 
-    for (int i = 0; i < data.size(); i++)
+    for (size_t i = 0; i < data.size(); i++)
     {
         if (data.at(i) == 0xAA)
         {

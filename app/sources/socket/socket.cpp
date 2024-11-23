@@ -15,17 +15,17 @@
 
 Socket::Socket(int sockNum) noexcept :
     IODevice(),
-    sock_(sockNum),
+    asycnSocket_ { false },
     maxConnections_ { 0 },
-    asycnSocket_ { false }
+    sock_(sockNum)
 {
 }
 
 Socket::Socket(const std::string &address, int portNum, SocketType st, bool nonBlockingMode) noexcept :
     IODevice(),
-    socketAddress_ { address },
     socketPortNum_ { portNum },
-    sockType_ { st }
+    sockType_ { st },
+    socketAddress_ { address }
 {
     if (nonBlockingMode)
     {
@@ -199,7 +199,6 @@ bool Socket::nonBlockingMode()
 int Socket::bytesAviable()
 {
     int  number_of_bytes_available = 0;
-    bool is_data_available         = false;
 
     const auto ioctl_result = ioctl(sock_, FIONREAD, &number_of_bytes_available);
 

@@ -5,8 +5,8 @@
 #include <unistd.h>
 
 EventLoop::EventLoop(uint32_t events, int fd) :
-    eventsMask_ { events },
-    fd_ { fd }
+    fd_ { fd },
+    eventsMask_ { events }
 {
 }
 
