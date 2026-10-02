@@ -37,6 +37,7 @@ uint64_t helpers::getFreeDiskSpace(const std::string &path)
 std::string helpers::pathToExec()
 {
     std::array< char, 256 > buff;
+    buff.fill(0);
     ssize_t                 len = ::readlink(selfExecPath, buff.data(), buff.max_size());
     if (len != -1)
     {
