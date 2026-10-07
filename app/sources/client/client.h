@@ -12,8 +12,6 @@ class Client
     int sendFile(const std::string& filePath);
 
   private:
-    int getfileSize(const std::string& file) const;
-
     std::pair< uint64_t, uint64_t > requestSendData(int fileSizeInBytes);
     int                             readAndSendFile(const std::string& file, std::pair< uint64_t, uint64_t >);
     bool                            confirmExit();

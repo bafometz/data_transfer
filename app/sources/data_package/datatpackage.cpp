@@ -156,7 +156,7 @@ COMMAND DatatPackage::getCommand() const
 
 int DatatPackage::getData(std::vector< uint8_t > &data) const
 {
-    auto size = dataSizeFromHeader();
+    const auto size = dataSizeFromHeader();
     data.clear();
     data.insert(data.begin(), data_.begin(), data_.begin() + size);
     return size;

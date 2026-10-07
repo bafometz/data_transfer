@@ -4,6 +4,7 @@
 #include "../helpers/helpers.h"
 #include "../server/server.h"
 
+#include <filesystem>
 #include <iostream>
 
 MainObject::MainObject(int argc, char** argv)
@@ -27,7 +28,7 @@ MainObject::MainObject(int argc, char** argv)
             if (hasNextArg())
             {
                 i++;
-                if (!helpers::isFileExist(std::string(argv[i])))
+                if (!std::filesystem::exists(std::string(argv[i])))
                 {
                     std::cout << "File doesn't exist" << std::endl;
                     std::cout << usage_ << std::endl;
@@ -83,7 +84,6 @@ int MainObject::start()
     {
         Client client("127.0.0.1", port_);
 
-
         // auto th1 = std::thread(
         //     [this]()
         //     {
@@ -108,7 +108,7 @@ int MainObject::start()
         // th1.join();
         // th2.join();
         // th3.join();
-        return  client.sendFile(filepath_);
+        return client.sendFile(filepath_);
     }
     else
     {

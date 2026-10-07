@@ -1,7 +1,7 @@
 #ifndef IODEVICE_H
 #define IODEVICE_H
 #include <cstdint>
-#include <vector>
+#include <span>
 
 /**
  * @brief Абстрактный класс, по-факту нужен для возможности использования кроме сокета другие каналы передачи, например последовательный порт.
@@ -40,14 +40,14 @@ class IODevice
      * @param Буфер в который будут сложены прочтенные данные
      * @return Количество байт прочитанных из устройства
      */
-    virtual int read(std::vector< uint8_t >&, int size = -1) = 0;
+    virtual ssize_t read(std::span<std::byte> buffer) = 0;
 
     /**
      * @brief Пишет в устройство заданное количество байт, если не задано (т.е -1) будет писать на всю длинну буфера т.е. std::vector::size
      * @param Буффер с данными которые нужно передать
      * @param Количество байт которые нужно передать из буффера, -1 если нужно писать весь буфер
      */
-    virtual int write(std::vector< uint8_t >&, int size = -1) = 0;
+    virtual ssize_t write(std::span<const std::byte> buffer) = 0;
 
     /**
      * @param Проверяет есть ли доступные данные для чтения
