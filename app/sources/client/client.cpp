@@ -24,8 +24,8 @@ int Client::sendFile(const std::string &filePath)
         return 1;
     }
 
-    LOG_INFO("Client prepare send file: ", filePath);
-    LOG_INFO("File size: ", fileSize);
+    OLD_LOG_INFO("Client prepare send file: ", filePath);
+    OLD_LOG_INFO("File size: ", fileSize);
 
     // Отправляем запрос на отправку файла, прикрепляем кол-во байт для отправки
     // Если сервер готов принять, то он отвечает одобрением и сколько пакетов ожидает
@@ -33,13 +33,13 @@ int Client::sendFile(const std::string &filePath)
 
     if (packAwait.first <= 0 || packAwait.second <= 0)
     {
-        LOG_ERROR("Server doesen't await data");
+        OLD_LOG_ERROR("Server doesen't await data");
         return 1;
     }
 
     // Всё отправили ждем завершения
     const auto packagesSended = readAndSendFile(filePath, packAwait);
-    LOG_INFO("Total packages uploaded:", packagesSended);
+    OLD_LOG_INFO("Total packages uploaded:", packagesSended);
 
     // Подтверждаем что всё хорошо
     std::ignore = confirmExit();
@@ -60,14 +60,14 @@ std::pair< uint64_t, uint64_t > Client::requestSendData(int fileSizeInBytes)
 
     pack.clear();
     pack.resize(buffSize_);
-    std::ignore = sock_.read(pack, buffSize_);
+    std::ignore = sock_.read({reinterpret_cast<std::byte*>(pack.data()), pack.size()});
     DatatPackage recivePackage;
     DatatPackage sendPackage;
     recivePackage.replacePackage(pack);
 
     if (!recivePackage.verifyCheckSum())
     {
-        LOG_ERROR("Checksum verification failed");
+        OLD_LOG_ERROR("Checksum verification failed");
         sendPackage.setCommand(COMMAND::CHECKSUM_ERROR);
         auto res = retryPackage(sendPackage, recivePackage, 10);
         if (res <= 0) return { -1, -1 };
@@ -75,7 +75,7 @@ std::pair< uint64_t, uint64_t > Client::requestSendData(int fileSizeInBytes)
 
     if (recivePackage.getCommand() != COMMAND::REQUEST_TO_SEND_APPROVED)
     {
-        LOG_ERROR("On request to file size recive", static_cast< int >(recivePackage.getCommand()));
+        OLD_LOG_ERROR("On request to file size recive", static_cast< int >(recivePackage.getCommand()));
     }
     std::vector< uint8_t > totalPackArr;
     recivePackage.getData(totalPackArr);
@@ -104,26 +104,26 @@ int Client::readAndSendFile(const std::string &file, std::pair< uint64_t, uint64
     {
         if (std::fseek(fp, static_cast< long int >(uploadedBytes), SEEK_SET) != 0)
         {
-            LOG_CRITICAL("fseek() failed in file ", file);
+            OLD_LOG_CRITICAL("fseek() failed in file ", file);
             std::fclose(fp);
             return -1;
         }
 
         const auto readRes = std::fread(fileReadBuffer.data(), sizeof(uint8_t), buffSize_, fp);
-        LOG_INFO("Readed from file:", readRes);
+        OLD_LOG_INFO("Readed from file:", readRes);
 
         request.setCommand(COMMAND::DATA_PACKAGE);
         request.setData(fileReadBuffer, readRes);
         request.calcChecksum();
 
         const auto writeRes = sock_.write(request);
-        LOG_INFO("Written to server:", writeRes, "bytes");
+        OLD_LOG_INFO("Written to server:", writeRes, "bytes");
 
-        const auto responceSize = sock_.read(packagesBuffer, buffSize_);
+        const auto responceSize = sock_.read({reinterpret_cast<std::byte*>(packagesBuffer.data()),packagesBuffer.size()});
 
         if (responceSize < DatatPackage::minSize())
         {
-            LOG_ERROR("Error on reading from server data");
+            OLD_LOG_ERROR("Error on reading from server data");
             return -1;
         }
 
@@ -131,14 +131,14 @@ int Client::readAndSendFile(const std::string &file, std::pair< uint64_t, uint64
 
         if (!responce.verifyCheckSum())  // Если на нашей стороне не сошлась чексумма
         {
-            LOG_INFO("Checksum error when check recive package");
+            OLD_LOG_INFO("Checksum error when check recive package");
 
             DatatPackage checksumerr;
             checksumerr.setCommand(COMMAND::CHECKSUM_ERROR);
 
             if (!retryPackage(checksumerr, responce, maxRetry_))
             {
-                LOG_CRITICAL("Too many checksum errors/errors, abort");
+                OLD_LOG_CRITICAL("Too many checksum errors/errors, abort");
                 std::fclose(fp);
                 return -1;
             }
@@ -151,26 +151,26 @@ int Client::readAndSendFile(const std::string &file, std::pair< uint64_t, uint64
         if (responce.getCommand() == COMMAND::CHECKSUM_ERROR)
         {
             retryCount++;
-            LOG_WARN("Server doesen't accept package, retry: ", retryCount);
+            OLD_LOG_WARN("Server doesen't accept package, retry: ", retryCount);
             continue;
         }
         else if (responce.getCommand() == COMMAND::PACKAGE_ACCPTED)
         {
             uploadedBytes += readRes;
-            LOG_INFO("Server accepted package");
-            LOG_INFO("Sended", uploadedBytes, "/", fileSize);
+            OLD_LOG_INFO("Server accepted package");
+            OLD_LOG_INFO("Sended", uploadedBytes, "/", fileSize);
             packagesSended++;
             retryCount = 0;
         }
         else if (responce.getCommand() == COMMAND::ABORT)
         {
-            LOG_WARN("Server send abort package");
+            OLD_LOG_WARN("Server send abort package");
             return -1;
         }
         else
         {
             retryCount++;
-            LOG_WARN("Unhandled respoce, retry:", retryCount, static_cast< int >(responce.getCommand()));
+            OLD_LOG_WARN("Unhandled respoce, retry:", retryCount, static_cast< int >(responce.getCommand()));
             continue;
         }
     }
@@ -194,9 +194,9 @@ bool Client::confirmExit()
     std::vector< uint8_t > pack;
     request.calcChecksum();
     request.generatePackage(pack);
-    const auto writeRes = sock_.write(pack, pack.size());
+    const auto writeRes = sock_.write({reinterpret_cast<const std::byte*>(pack.data()),pack.size()});
 
-    LOG_INFO("Written to server:", writeRes, "bytes");
+    OLD_LOG_INFO("Written to server:", writeRes, "bytes");
     pack.clear();
     return true;
 }
@@ -207,13 +207,15 @@ bool Client::retryPackage(const DatatPackage &pkg, DatatPackage &reply, int time
 
     for (int i = 0; i < times; i++)
     {
-        const auto writeRes = sock_.write(pack, pack.size());
+        const auto writeRes = sock_.write({reinterpret_cast<const std::byte*>(pack.data()),pack.size()});
+
         if (writeRes <= 0)
         {
             return false;
         }
 
-        std::ignore = sock_.read(pack, buffSize_);
+        const auto responceSize = sock_.read({reinterpret_cast<std::byte*>(pack.data()),pack.size()});
+
         reply.replacePackage(pack);
 
         if (reply.getCommand() != COMMAND::UNKNOWN || reply.getCommand() != COMMAND::CHECKSUM_ERROR)

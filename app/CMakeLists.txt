@@ -1,14 +1,13 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(DataTransfer LANGUAGES CXX)
+project(dtransfer_app LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-add_compile_options(-Wall -Werror)
-set (EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../build/bin)
-set (LIBRARY_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../build/bin)
+# add_compile_options(-Wall  -Wextra -Werror)
+add_compile_options(-Wall  -Wextra)
 
-add_executable(DataTransfer
+add_executable(${PROJECT_NAME}
 
                sources/main.cpp
                sources/server/server.h sources/server/server.cpp
@@ -28,7 +27,7 @@ add_executable(DataTransfer
 
 include(GNUInstallDirs)
 
-install(TARGETS DataTransfer
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-)
+# install(TARGETS DataTransfer
+#     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+#     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+# )

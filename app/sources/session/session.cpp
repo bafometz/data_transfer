@@ -49,15 +49,15 @@ bool Session::canSaveFile()
 {
     if (pathToFile_.empty())
     {
-        LOG_ERROR("Can't save file, path to file is not setted");
+        OLD_LOG_ERROR("Can't save file, path to file is not setted");
         return false;
     }
 
     if (helpers::getFreeDiskSpace(pathToFile_) < transmittedData_.maxBytes)
     {
-        LOG_ERROR("Can't save file");
-        LOG_ERROR("File size: ", transmittedData_.maxBytes);
-        LOG_ERROR("Free space at path", pathToFile_, "=", helpers::getFreeDiskSpace(pathToFile_));
+        OLD_LOG_ERROR("Can't save file");
+        OLD_LOG_ERROR("File size: ", transmittedData_.maxBytes);
+        OLD_LOG_ERROR("Free space at path", pathToFile_, "=", helpers::getFreeDiskSpace(pathToFile_));
         return false;
     }
     return true;
@@ -65,11 +65,11 @@ bool Session::canSaveFile()
 
 void Session::printInfo()
 {
-    LOG_INFO("Session info:");
-    LOG_INFO("Session start at: ", connectionTime_);
-    LOG_INFO("Current timestamp:", dateTime_.getTimestampStr(dateTime_.getMsSinceEpoh()));
-    LOG_INFO("Session duration:", timer_.getLap(), "ms");
-    LOG_INFO("Bytes recived:", transmittedData_.bytesRecived);
+    OLD_LOG_INFO("Session info:");
+    OLD_LOG_INFO("Session start at: ", connectionTime_);
+    OLD_LOG_INFO("Current timestamp:", dateTime_.getTimestampStr(dateTime_.getMsSinceEpoh()));
+    OLD_LOG_INFO("Session duration:", timer_.getLap(), "ms");
+    OLD_LOG_INFO("Bytes recived:", transmittedData_.bytesRecived);
 }
 
 std::string Session::fileName() const

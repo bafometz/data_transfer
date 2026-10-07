@@ -49,7 +49,7 @@ bool EventLoop::initEventPoll()
 
     if (epollFd_ < 0)
     {
-        LOG_ERROR("Can't create epoll", std::strerror(errno));
+        OLD_LOG_ERROR("Can't create epoll", std::strerror(errno));
         return false;
     }
 
@@ -99,7 +99,7 @@ bool EventLoop::register_fd()
 
     if (res == -1)
     {
-        LOG_ERROR("Can't assign file descriptor to epoll", std::strerror(errno));
+        OLD_LOG_ERROR("Can't assign file descriptor to epoll", std::strerror(errno));
         return false;
     }
 
@@ -112,7 +112,7 @@ bool EventLoop::unregister_fd()
 
     if (res == -1)
     {
-        LOG_ERROR("Can't remove file descriptor from epoll", std::strerror(errno));
+        OLD_LOG_ERROR("Can't remove file descriptor from epoll", std::strerror(errno));
         return false;
     }
 
@@ -139,7 +139,7 @@ bool EventLoop::processEventLoop()
 
         if (event.events & errmask)
         {
-            LOG_ERROR("Detected error, exit");
+            OLD_LOG_ERROR("Detected error, exit");
             return false;
         }
 
@@ -155,7 +155,7 @@ bool EventLoop::processEventLoop()
             }
             else
             {
-                LOG_WARN("Recived signal", eventVal, "but slot not found");
+                OLD_LOG_WARN("Recived signal", eventVal, "but slot not found");
             }
         }
     }
