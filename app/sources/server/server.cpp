@@ -94,7 +94,7 @@ void Server::createSubEventLoop(SocketPtr pSock)
             EventLoop      lp(EPOLLIN | EPOLLOUT | EPOLLHUP | EPOLLERR, pSock->getFd());
             transmit_state st;
             Session        ss;
-            st.buffer.resize(2048);
+            st.buffer.resize(st.rwChunkSize);
             recivePackage(lp, st, pSock, ss);
             sendPackage(lp, st, pSock, ss);
             if (!lp.initEventPoll()) return;
@@ -107,7 +107,13 @@ void Server::recivePackage(EventLoop& ev, transmit_state& state, SocketPtr pSock
     ev.bindSlot(EPOLLIN,
                 [&state, pSock, &ss]()
                 {
-                    const auto recivedDataSize = pSock->read({reinterpret_cast<std::byte*>(state.buffer.data()), (size_t)state.rwChunkSize});
+                    const auto recivedDataSize = pSock->read({reinterpret_cast<std::byte*>(state.buffer.data()), state.buffer.size()});
+                    const int  readErrno       = errno;
+
+                    // Неблокирующий сокет: данных сейчас нет, это не разрыв соединения
+                    if (recivedDataSize < 0 && (readErrno == EAGAIN || readErrno == EWOULDBLOCK))
+                        return EVENT_LOOP_SIGNALS::SIG_NONE;
+
                     ss.recivedPackageRef().replacePackage(state.buffer);
                     OLD_LOG_INFO("Recived from client:", recivedDataSize, "bytes");
 
@@ -258,9 +264,14 @@ void Server::sendPackage(EventLoop& ev, transmit_state& state, SocketPtr pSock, 
                     }
 
                    const auto writeResult = pSock->write(ss.packageToSendRef());
+                   const int  writeErrno  = errno;
 
                     if (writeResult < 0)
                     {
+                        // Неблокирующий сокет: буфер отправки переполнен, повторим по EPOLLOUT
+                        if (writeErrno == EAGAIN || writeErrno == EWOULDBLOCK)
+                            return EVENT_LOOP_SIGNALS::SIG_NONE;
+
                         OLD_LOG_ERROR("Write result less than zero, exit");
                         ss.reset();
                         return EVENT_LOOP_SIGNALS::SIG_EXIT;

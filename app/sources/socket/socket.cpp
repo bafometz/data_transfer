@@ -58,7 +58,7 @@ Socket::~Socket()
     }
 }
 
-bool Socket::open([[__maybe_unused__]]OpenMode mode)
+bool Socket::open([[maybe_unused]] OpenMode mode)
 {
     if (sock_ < 0) {
         OLD_LOG_CRITICAL("Error, can't open socket");
@@ -89,7 +89,7 @@ bool Socket::close()
 
     const auto res = ::close(sock_);
     if (res != 0) {
-        LOG_CRITICAL("Can't close socket(). {}", res, data_transfer::errors::system_error {});
+        LOG_CRITICAL("Can't close socket({}): {}", res, data_transfer::errors::system_error {});
         return false;
     }
 
@@ -157,7 +157,7 @@ void Socket::setMaximumConnectionsHandle(int maxConnections)
 }
 
 bool Socket::shutdown() noexcept{
-    const auto success = (::shutdown(sock_, 2) == 0);
+    const auto success = (::shutdown(sock_, SHUT_RDWR) == 0);
     if(!success) {
         LOG_ERROR("Can't shotdown socket: {}", data_transfer::errors::system_error{});
         return false;
@@ -191,36 +191,42 @@ int Socket::bytesAviable()
 
 ssize_t Socket::read(std::span<std::byte> container)
 {
-    const auto bytes_readed = ::recv(sock_, container.data(), container.size(), 0) ;
-    if(bytes_readed == -1 ) {
-        if( errno == EINTR) {
-            return ::recv(sock_, container.data(), container.size(), 0);
-        }
-        
-        if( errno == EAGAIN) {
-            return 0;
-        }
-        
+    for (;;) {
+        const auto bytes_readed = ::recv(sock_, container.data(), container.size(), 0);
+        if (bytes_readed >= 0)
+            return bytes_readed;
+
+        if (errno == EINTR)
+            continue;
+
+        // Неблокирующий режим: данных сейчас нет. Возвращаем -1, вызывающая сторона
+        // должна отличать EAGAIN от реальной ошибки/разрыва по errno.
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return -1;
+
+        LOG_ERROR("recv() failed: {}", data_transfer::errors::system_error {});
+        return -1;
     }
-    return  bytes_readed;
 }
 
-ssize_t Socket::write(std::span<const  std::byte> buffer)
+ssize_t Socket::write(std::span<const std::byte> buffer)
 {
-    const auto bytes_written = ::write(sock_, buffer.data(), buffer.size());
-    if (bytes_written == -1 ) {
-        if (errno == EINTR) {
-            LOG_WARN("Write failed with EINTR, retry one time and return, let calle decide");
-            return ::write(sock_, buffer.data(), buffer.size());
-        }
+    for (;;) {
+        const auto bytes_written = ::write(sock_, buffer.data(), buffer.size());
+        if (bytes_written >= 0)
+            return bytes_written;
 
-        if(errno == EAGAIN) {
-             LOG_WARN("Write failed with EINTR, retry one time and return, let calle decide");
-             return 0;
-        }
+        if (errno == EINTR)
+            continue;
+
+        // Неблокирующий режим: буфер отправки переполнен. Возвращаем -1,
+        // вызывающая сторона должна отличать EAGAIN по errno.
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return -1;
+
+        LOG_ERROR("write() failed: {}", data_transfer::errors::system_error {});
+        return -1;
     }
-
-    return bytes_written;
 }
 
 ssize_t Socket::write(const DatatPackage &pkg)
